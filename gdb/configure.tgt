@@ -364,6 +364,7 @@ nios2dpx*-*-*)
 nios2*-*-*)		
 	# Target: Altera Nios II Processor (New Jersey)
 	gdb_target_obs="nios2-tdep.o glibc-tdep.o solib.o solib-svr4.o"
+	gdb_sim=../sim/nios2/libsim.a
 	;;
 
 powerpc-*-netbsd* | powerpc-*-knetbsd*-gnu)

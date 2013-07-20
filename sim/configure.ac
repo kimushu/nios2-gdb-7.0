@@ -130,6 +130,9 @@ if test "${enable_sim}" != no; then
 	   igen=yes
 	   testsuite=yes
 	   ;;
+       nios2-*-* )
+           AC_CONFIG_SUBDIRS(nios2)
+	   ;;
        *)
 	   # No simulator subdir, so the subdir "common" isn't needed.
 	   common=no
