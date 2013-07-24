@@ -1,258 +1,558 @@
 /**
  * @file interp.c
- * @brief Nios2 simulator
+ * @brief NiosII instruction interpreter
  * @author kimu_shu
  */
 
 #include "config.h"
-#include "bfd.h"
 #include "gdb/callback.h"
-// #include "gdb/signals.h"
+#include "gdb/signals.h"
 #include "libiberty.h"
 #include "gdb/remote-sim.h"
 #include "sim-config.h"
 #include "sim-types.h"
 #include "sim-utils.h"
-#include "gdb/sim-nios2.h"
+typedef unsigned32 uint32_t;
+#include "sim-nios2.h"
+#include "asm_nios2.h"
+#include "sim-main.h"
 
-#define status_RSIE     23
-#define status_NMI      22
-#define status_PRS      16
-#define status_CRS      10
-#define status_IL       4
-#define status_IH       3
-#define status_EH       2
-#define status_U        1
-#define status_PIE      0
+nios2_cpu_t cpu;
 
-static SIM_OPEN_KIND sim_kind;
-static struct host_callback_struct *sim_callback;
-static struct bfd *sim_bfd;
-static char *sim_name;
-static char sim_cpu[256];
-static char sim_loading;
-
-union regset_t
-  {
-    unsigned32 array[1];
-    struct
-      {
-        unsigned32
-          zero, at, r2, r3, r4, r5, r6, r7,
-          r8, r9, r10, r11, r12, r13, r14, r15,
-          r16, r17, r18, r19, r20, r21, r22, r23,
-          et, bt, gp, sp, fp, ea, ba, ra,
-          pc,
-          status, estatus, bstatus,
-          ienable, ipending, cpuid,
-          ctl6, exception, pteaddr, tlbacc, tlbmisc,
-          ctl11, badaddr, config, mpubase, mpuacc;
-      };
-  };
-
-struct feature_t
-  {
-    unsigned hwdiv  : 1;  /* embeddedsw.CMacro.HARDWARE_DIVIDE_PRESENT */
-    unsigned hwmul  : 1;  /* embeddedsw.CMacro.HARDWARE_MULTIPLY_PRESENT */
-    unsigned hwmulx : 1;  /* embeddedsw.CMacro.HARDWARE_MULX_PRESENT */
-  };
-
-static union regset_t regs;
-static struct feature_t feature;
-static unsigned32 cpu_freq;
-
-static void
-store_le32 (unsigned char *buf, unsigned32 val)
+int
+nios2_reset(void)
 {
-  buf[3] = val >> 24;
-  buf[2] = val >> 16;
-  buf[1] = val >> 8;
-  buf[0] = val >> 0;
-}
-
-static SIM_RC
-sopcinfo_open (void)
-{
-  return SIM_RC_FAIL;
-}
-
-static SIM_RC
-sopcinfo_get_i (const char *module, const char *path, unsigned32 *buffer)
-{
-  return SIM_RC_FAIL;
-}
-
-static SIM_RC
-select_cpu (const char *cpu)
-{
-  return SIM_RC_FAIL;
-}
-
-SIM_DESC
-sim_open (SIM_OPEN_KIND kind, struct host_callback_struct *callback, struct bfd *abfd, char **argv)
-{
-  printf("sim_open()\n");
-  sim_kind = kind;
-  sim_callback = callback;
-  sim_bfd = abfd;
-  sim_name = argv[0];
-
-  return (SIM_DESC) 1;
-}
-
-void
-sim_close (SIM_DESC sd, int quitting)
-{
-  /* nothing to do */
-  printf("sim_close()\n");
-}
-
-SIM_RC
-sim_load (SIM_DESC sd, char *prog, struct bfd *abfd, int from_tty)
-{
-  printf("sim_load(prog=%s)\n", prog);
-  bfd *prog_bfd;
-
-  sim_loading = 1;
-  prog_bfd = sim_load_file (sd, sim_name, sim_callback, prog, abfd,
-                            sim_kind == SIM_OPEN_DEBUG,
-                            0, sim_write);
-  sim_loading = 0;
-
-  if (prog_bfd == NULL)
-    return SIM_RC_FAIL;
-
-  if (abfd != NULL)
-    sim_bfd = abfd;
-
-  return SIM_RC_OK;
-}
-
-SIM_RC
-sim_create_inferior (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
-{
-  SIM_RC result;
-  unsigned32 pc, tmp;
   int i;
 
-  printf("sim_create_inferior()\n");
-  result = sopcinfo_get_i(sim_cpu, "embeddedsw.CMacro.RESET_ADDR", &pc);
-  if (result != SIM_RC_OK)
+  /* initialize general-purpose registers */
+  for (i = 0; i < 32; ++i)
+    cpu.regs.array[i] = 0xdeadbeef;
+  cpu.regs.zero = 0;
+
+  /* initialize control registers */
+  cpu.regs.status = NIOS2_STATUS_RSIE;
+  cpu.regs.estatus = 0;
+  cpu.regs.bstatus = 0;
+  cpu.regs.ienable = 0;
+  cpu.regs.ipending = 0;
+  cpu.regs.cpuid = cpu.features.cpuid;
+  cpu.regs.ctl6 = 0xffffffff;
+  cpu.regs.exception = 0;
+  if (cpu.features.mmu)
     {
-      pc = bfd_get_start_address(sim_bfd);
-      feature.hwdiv = 1;
-      feature.hwmul = 1;
-      feature.hwmulx = 1;
+      cpu.regs.pteaddr = 0;
+      cpu.regs.tlbacc = 0;
+      cpu.regs.tlbmisc = 0;
     }
   else
     {
-      tmp = 1;
-      result = sopcinfo_get_i(sim_cpu, "embeddedsw.CMacro.HARDWARE_DIVIDE_PRESENT", &tmp);
-      feature.hwdiv = (tmp != 0) ? 1 : 0;
-
-      tmp = 1;
-      result = sopcinfo_get_i(sim_cpu, "embeddedsw.CMacro.HARDWARE_MULTIPLY_PRESENT", &tmp);
-      feature.hwmul = (tmp != 0) ? 1 : 0;
-
-      tmp = 1;
-      result = sopcinfo_get_i(sim_cpu, "embeddedsw.CMacro.HARDWARE_MULX_PRESENT", &tmp);
-      feature.hwmulx = (tmp != 0) ? 1 : 0;
+      cpu.regs.pteaddr = 0xffffffff;
+      cpu.regs.tlbacc = 0xffffffff;
+      cpu.regs.tlbmisc = 0xffffffff;
     }
-
-  regs.zero = 0;
-
-  for (i = SIM_NIOS2_R1_REGNUM; i <= SIM_NIOS2_R31_REGNUM; ++i)
-    regs.array[i] = 0xdeadbeef;
-
-  for (; i <= SIM_NIOS2_MPUACC_REGNUM; ++i)
-    regs.array[i] = 0x00000000;
-
-  regs.pc = pc;
-  regs.status = (1 << status_RSIE);
-  sopcinfo_get_i(sim_cpu, "embeddedsw.CMacro.CPU_ID_VALUE", &regs.cpuid);
-
-  cpu_freq = 100000000;
-  sopcinfo_get_i(sim_cpu, "embeddedsw.CMacro.CPU_FREQ", &cpu_freq);
-
-  return SIM_RC_OK;
-}
-
-int
-sim_read (SIM_DESC sd, SIM_ADDR mem, unsigned char *buf, int length)
-{
-  printf("sim_read (mem=0x%x, len=0x%x)\n", mem, length);
-  return length;
-}
-
-int
-sim_write (SIM_DESC sd, SIM_ADDR mem, unsigned char *buf, int length)
-{
-  printf("sim_write (mem=0x%x, len=0x%x)\n", mem, length);
-  return length;
-}
-
-int
-sim_fetch_register (SIM_DESC sd, int regno, unsigned char *buf, int length)
-{
-  if (length != 4)
-    return 4;
-
-  if (regno >= SIM_NIOS2_R0_REGNUM && regno <= SIM_NIOS2_MPUACC_REGNUM)
+  cpu.regs.ctl11 = 0xffffffff;
+  cpu.regs.badaddr = 0;
+  if (cpu.features.mpu)
     {
-      store_le32(buf, regs.array[regno]);
-      return -1;
+      cpu.regs.config = 0;
+      cpu.regs.mpubase = 0;
+      cpu.regs.mpuacc = 0;
+    }
+  else
+    {
+      cpu.regs.config = 0xffffffff;
+      cpu.regs.mpubase = 0xffffffff;
+      cpu.regs.mpuacc = 0xffffffff;
     }
 
-  return 0;
-}
+  /* jump to reset vector */
+  cpu.regs.pc = cpu.features.reset_addr;
 
-int
-sim_store_register (SIM_DESC sd, int regno, unsigned char *buf, int length)
-{
-}
-
-void
-sim_info (SIM_DESC sd, int verbose)
-{
-}
-
-void
-sim_resume (SIM_DESC sd, int step, int siggnal)
-{
-}
-
-int
-sim_stop (SIM_DESC sd)
-{
-}
-
-void
-sim_stop_reason (SIM_DESC sd, enum sim_stop *reason, int *sigrc)
-{
-}
-
-void
-sim_do_command (SIM_DESC sd, char *cmd)
-{
-}
-
-void
-sim_set_callbacks (struct host_callback_struct *ptr)
-{
-  /* DEPRECATED */
-}
-
-void
-sim_size (int i)
-{
-  /* DEPRECATED */
-}
-
-int
-sim_trace (SIM_DESC sd)
-{
-  /* DEPRECATED */
   return 1;
+}
+
+int
+nios2_interpret(int step)
+{
+  unsigned32 i, a, b, c;
+  unsigned32 opcode;
+  unsigned32 nextpc;
+  int flags;
+  union {
+    unsigned32  wu;
+    signed32    w;
+    unsigned16  hu;
+    signed16    h;
+    unsigned8   bu;
+    signed8     b;
+  } buf;
+
+  if (step)
+    {
+      cpu.state = sim_stopped;
+      cpu.signal = TARGET_SIGNAL_TRAP;
+    }
+  else
+    cpu.state = sim_running;
+
+  do
+    {
+      nextpc = cpu.regs.pc;
+
+      if (avm_read(nextpc, (unsigned char *) &i, 4, AVM_INSTRUCTION) != 4)
+        {
+          sim_printf("instruction fetch failed (@%08x)\n", nextpc);
+          return 0; /* instruction fetch failed */
+        }
+
+      i = LE2H4(i);
+
+      opcode = NIOS2_OP(NIOS2_GET_OP(i));
+      if (opcode == NIOS2_OP(0x3a))
+        opcode |= NIOS2_OPX(NIOS2_GET_OPX(i));
+
+      // sim_printf("@%08x (%08x) op=0x%02x, opx=0x%02x\n", nextpc, i, NIOS2_GET_OP(opcode), NIOS2_GET_OPX(opcode));
+
+      nextpc += 4;
+      switch(opcode)
+        {
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x31):  /* add c,a,b */
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] + cpu.regs.gpr[NIOS2_GET_B(i)];
+            break;
+          case NIOS2_OP(0x04):                  /* addi b,a,sv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] + (signed16) NIOS2_GET_IMM16(i);
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x0e):  /* and c,a,b */
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] & cpu.regs.gpr[NIOS2_GET_B(i)];
+            break;
+          case NIOS2_OP(0x2c):                  /* andhi b,a,sv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] & (NIOS2_GET_IMM16(i) << 16);
+            break;
+          case NIOS2_OP(0x0c):                  /* andi b,a,sv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] & NIOS2_GET_IMM16(i);
+            break;
+          case NIOS2_OP(0x26):                  /* beq a,b,sv */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] == cpu.regs.gpr[NIOS2_GET_B(i)])
+              goto branch;
+            break;
+          case NIOS2_OP(0x0e):                  /* bge a,b,sv */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] >=
+                (signed32) cpu.regs.gpr[NIOS2_GET_B(i)])
+              goto branch;
+            break;
+          case NIOS2_OP(0x2e):                  /* bgeu a,b,sv */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] >= cpu.regs.gpr[NIOS2_GET_B(i)])
+              goto branch;
+            break;
+          case NIOS2_OP(0x16):                  /* blt a,b,sv */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] <
+                (signed32) cpu.regs.gpr[NIOS2_GET_B(i)])
+              goto branch;
+            break;
+          case NIOS2_OP(0x36):                  /* bltu a,b,sv */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] < cpu.regs.gpr[NIOS2_GET_B(i)])
+              goto branch;
+            break;
+          case NIOS2_OP(0x1e):                  /* bne a,b,sv */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] != cpu.regs.gpr[NIOS2_GET_B(i)])
+              goto branch;
+            break;
+          case NIOS2_OP(0x06):                  /* br sv */
+branch:
+            nextpc += (signed16) NIOS2_GET_IMM16(i);
+            if (nextpc & 3)
+              goto misaligned_destination_address;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x34):  /* break imm5 */
+            // cpu.regs.bstatus = cpu.regs.status;
+            // cpu.regs.status &= ~(NIOS2_STATUS_PIE | NIOS2_STATUS_U);
+            // cpu.regs.ba = nextpc;
+            // nextpc = cpu.features.break_addr;
+            cpu.state = sim_stopped;
+            cpu.signal = TARGET_SIGNAL_TRAP;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x09):  /* bret */
+            a = cpu.regs.ba;
+            if (a & 3)
+              goto misaligned_destination_address;
+            if (cpu.regs.status & NIOS2_STATUS_U)
+              goto supervisor_only_instruction;
+            cpu.regs.status = cpu.regs.bstatus;
+            nextpc = a;
+            break;
+          case NIOS2_OP(0x00):                  /* call imm26 */
+            cpu.regs.ra = nextpc;
+            nextpc = NIOS2_GET_IMM26(i) * 4;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x1d):  /* callr a */
+            a = cpu.regs.gpr[NIOS2_GET_A(i)];
+            if (a & 3)
+              goto misaligned_destination_address;
+            cpu.regs.ra = nextpc;
+            nextpc = a;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x20):  /* cmpeq c,a,b */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] == cpu.regs.gpr[NIOS2_GET_B(i)])
+              c = 1;
+            else
+              c = 0;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x20):                  /* cmpeqi b,a,sv */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] ==
+                (signed32) NIOS2_GET_IMM16(i))
+              b = 1;
+            else
+              b = 0;
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x08):  /* cmpge c,a,b */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] >=
+                (signed32) cpu.regs.gpr[NIOS2_GET_B(i)])
+              c = 1;
+            else
+              c = 0;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x08):                  /* cmpgei b,a,sv */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] >=
+                (signed32) NIOS2_GET_IMM16(i))
+              b = 1;
+            else
+              b = 0;
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x28):  /* cmpgeu c,a,b */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] >= cpu.regs.gpr[NIOS2_GET_B(i)])
+              c = 1;
+            else
+              c = 0;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x28):                  /* cmpgeui b,a,sv */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] >= NIOS2_GET_IMM16(i))
+              b = 1;
+            else
+              b = 0;
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x10):  /* cmplt c,a,b */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] <
+                (signed32) cpu.regs.gpr[NIOS2_GET_B(i)])
+              c = 1;
+            else
+              c = 0;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x10):                  /* cmplti b,a,sv */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] <
+                (signed32) NIOS2_GET_IMM16(i))
+              b = 1;
+            else
+              b = 0;
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x30):  /* cmpltu c,a,b */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] < cpu.regs.gpr[NIOS2_GET_B(i)])
+              c = 1;
+            else
+              c = 0;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x30):                  /* cmpltui b,a,sv */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] < NIOS2_GET_IMM16(i))
+              b = 1;
+            else
+              b = 0;
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x18):  /* cmpne c,a,b */
+            if (cpu.regs.gpr[NIOS2_GET_A(i)] != cpu.regs.gpr[NIOS2_GET_B(i)])
+              c = 1;
+            else
+              c = 0;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x18):                  /* cmpnei b,a,sv */
+            if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] !=
+                (signed32) NIOS2_GET_IMM16(i))
+              b = 1;
+            else
+              b = 0;
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          /* TODO: custom */
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x25):  /* div c,a,b */
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x24):  /* divu c,a,b */
+            if (!cpu.features.hwdiv)
+              goto unimplemented_instruction;
+            a = cpu.regs.gpr[NIOS2_GET_A(i)];
+            b = cpu.regs.gpr[NIOS2_GET_B(i)];
+            if (opcode & NIOS2_OPX(1))
+              {
+                /* signed */
+                if (b == 0)
+                  c = 0x80000000;
+                else if (a == 0x80000000 && b == 0xffffffff)
+                  c = 0x7fffffff;
+                else
+                  c = (signed32) a / (signed32)b;
+              }
+            else
+              {
+                /* unsigned */
+                if (b == 0)
+                  c = 0xffffffff;
+                else
+                  c = a / b;
+              }
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x01):  /* eret */
+            a = cpu.regs.ea;
+            if (a & 3)
+              goto misaligned_destination_address;
+            if (cpu.regs.status & NIOS2_STATUS_U)
+              goto supervisor_only_instruction;
+            cpu.regs.status = cpu.regs.estatus;
+            nextpc = a;
+            break;
+          /* TODO: flushd */
+          /* TODO: flushda */
+          /* TODO: flushi */
+          /* TODO: flushp */
+          /* TODO: initd */
+          /* TODO: initda */
+          /* TODO: initi */
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x0d):  /* jmp a */
+            a = cpu.regs.gpr[NIOS2_GET_A(i)];
+            if (a & 3)
+              goto misaligned_destination_address;
+            nextpc = a;
+            break;
+          case NIOS2_OP(0x01):                  /* jmpi imm26 */
+            nextpc = NIOS2_GET_IMM26(i) * 4;
+            break;
+          case NIOS2_OP(0x07):                  /* ldb b,sv(a) */
+          case NIOS2_OP(0x27):                  /* ldbio b,sv(a) */
+          case NIOS2_OP(0x03):                  /* ldbu b,sv(a) */
+          case NIOS2_OP(0x23):                  /* ldbuio b,sv(a) */
+          case NIOS2_OP(0x0f):                  /* ldh b,sv(a) */
+          case NIOS2_OP(0x2f):                  /* ldhio b,sv(a) */
+          case NIOS2_OP(0x0b):                  /* ldhu b,sv(a) */
+          case NIOS2_OP(0x2b):                  /* ldhuio b,sv(a) */
+          case NIOS2_OP(0x17):                  /* ldw b,sv(a) */
+          case NIOS2_OP(0x37):                  /* ldwio b,sv(a) */
+            if (opcode & NIOS2_OP(0x10))
+              c = 4;
+            else if (opcode & NIOS2_OP(0x08))
+              c = 2;
+            else
+              c = 1;
+
+            a = cpu.regs.gpr[NIOS2_GET_A(i)] + (signed16) NIOS2_GET_IMM16(i);
+            if ((a & (c - 1)) != 0)
+              goto misaligned_data_address;
+
+            flags = AVM_DATA | ((opcode & NIOS2_OP(0x20)) != 0 ? AVM_NOCACHE : 0);
+            if (avm_read(a, (unsigned char *) &buf, c, AVM_DATA | flags) != c)
+              /* TODO: data access failed */
+              b = 0xffffffff;
+            else if (c == 1)
+              b = (opcode & NIOS2_OP(0x04)) ? (signed32) buf.b : buf.bu;
+            else if (c == 2)
+              b = (opcode & NIOS2_OP(0x04)) ? (signed32) buf.h : buf.hu;
+            else
+              b = buf.wu;
+
+            cpu.regs.gpr[NIOS2_GET_B(i)] = b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x27):  /* mul c,a,b */
+            if (!cpu.features.hwmul)
+              goto unimplemented_instruction;
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] * cpu.regs.gpr[NIOS2_GET_B(i)];
+            break;
+          case NIOS2_OP(0x24):                  /* muli b,a,sv */
+            if (!cpu.features.hwmul)
+              goto unimplemented_instruction;
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] * (signed32) NIOS2_GET_IMM16(i);
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x1f):  /* mulxss c,a,b */
+            if (!cpu.features.hwmulx)
+              goto unimplemented_instruction;
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              ((signed64) cpu.regs.gpr[NIOS2_GET_A(i)] *
+                (signed32) cpu.regs.gpr[NIOS2_GET_B(i)]) >> 32;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x17):  /* mulxsu c,a,b */
+            if (!cpu.features.hwmulx)
+              goto unimplemented_instruction;
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              ((signed64) cpu.regs.gpr[NIOS2_GET_A(i)] *
+                (unsigned32) cpu.regs.gpr[NIOS2_GET_B(i)]) >> 32;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x07):  /* mulxuu c,a,b */
+            if (!cpu.features.hwmulx)
+              goto unimplemented_instruction;
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              ((unsigned64) cpu.regs.gpr[NIOS2_GET_A(i)] *
+                (unsigned32) cpu.regs.gpr[NIOS2_GET_B(i)]) >> 32;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x1c):  /* nextpc c */
+            cpu.regs.gpr[NIOS2_GET_C(i)] = nextpc;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x06):  /* nor c,a,b */
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              ~(cpu.regs.gpr[NIOS2_GET_A(i)] | cpu.regs.gpr[NIOS2_GET_B(i)]);
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x16):  /* or c,a,b */
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] | cpu.regs.gpr[NIOS2_GET_B(i)];
+            break;
+          case NIOS2_OP(0x34):                  /* orhi b,a,uv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] | (NIOS2_GET_IMM16(i) << 16);
+            break;
+          case NIOS2_OP(0x14):                  /* ori b,a,uv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] | NIOS2_GET_IMM16(i);
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x05):  /* ret */
+            nextpc = cpu.regs.ra;
+            if (nextpc & 3)
+              goto misaligned_destination_address;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x03):  /* rol c,a,b */
+            b = cpu.regs.gpr[NIOS2_GET_B(i)] & 31;
+            goto rotate;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x02):  /* roli c,a,imm5 */
+            b = NIOS2_GET_IMM5(i);
+            goto rotate;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x0b):  /* ror c,a,b */
+            b = (32 - (cpu.regs.gpr[NIOS2_GET_B(i)] & 31)) & 31;
+rotate:
+            a = cpu.regs.gpr[NIOS2_GET_A(i)];
+            if (b == 0)
+              c = a;
+            else
+              c = (a << b) | (a >> (32 - b));
+            cpu.regs.gpr[NIOS2_GET_C(i)] = c;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x13):  /* sll c,a,b */
+            b = cpu.regs.gpr[NIOS2_GET_B(i)] & 31;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = cpu.regs.gpr[NIOS2_GET_A(i)] << b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x12):  /* slli c,a,imm5 */
+            b = NIOS2_GET_IMM5(i);
+            cpu.regs.gpr[NIOS2_GET_C(i)] = cpu.regs.gpr[NIOS2_GET_A(i)] << b;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x3b):  /* sra c,a,b */
+            b = cpu.regs.gpr[NIOS2_GET_B(i)] & 31;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = (signed32) cpu.regs.gpr[NIOS2_GET_A(i)] / 2;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x3a):  /* srai c,a,imm5 */
+            b = NIOS2_GET_IMM5(i);
+            cpu.regs.gpr[NIOS2_GET_C(i)] = (signed32) cpu.regs.gpr[NIOS2_GET_A(i)] / 2;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x1b):  /* srl c,a,b */
+            b = cpu.regs.gpr[NIOS2_GET_B(i)] & 31;
+            cpu.regs.gpr[NIOS2_GET_C(i)] = cpu.regs.gpr[NIOS2_GET_A(i)] / 2;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x1a):  /* srli c,a,imm5 */
+            b = NIOS2_GET_IMM5(i);
+            cpu.regs.gpr[NIOS2_GET_C(i)] = cpu.regs.gpr[NIOS2_GET_A(i)] / 2;
+            break;
+          case NIOS2_OP(0x05):                  /* stb b,sv,a */
+          case NIOS2_OP(0x25):                  /* stbio b,sv,a */
+          case NIOS2_OP(0x0d):                  /* sth b,sv,a */
+          case NIOS2_OP(0x2d):                  /* sthio b,sv,a */
+          case NIOS2_OP(0x15):                  /* stw b,sv,a */
+          case NIOS2_OP(0x35):                  /* stwio b,sv,a */
+            b = cpu.regs.gpr[NIOS2_GET_B(i)];
+            if (opcode & NIOS2_OP(0x10))
+              {
+                c = 4;
+                buf.wu = b;
+              }
+            else if (opcode & NIOS2_OP(0x08))
+              {
+                c = 2;
+                buf.hu = b;
+              }
+            else
+              {
+                c = 1;
+                buf.bu = b;
+              }
+
+            a = cpu.regs.gpr[NIOS2_GET_A(i)] + (signed16) NIOS2_GET_IMM16(i);
+            if ((a & (c - 1)) != 0)
+              goto misaligned_data_address;
+
+            flags = AVM_DATA | ((opcode & NIOS2_OP(0x20)) != 0 ? AVM_NOCACHE : 0);
+            if (avm_write(a, (unsigned char *) &buf, c, AVM_DATA | flags) != c)
+              /* TODO: data access failed */
+              ;
+            break;
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x39):  /* sub c,a,b */
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] - cpu.regs.gpr[NIOS2_GET_B(i)];
+            break;
+          /* TODO: sync */
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x2d):  /* trap imm5 */
+            // cpu.regs.estatus = cpu.regs.status;
+            // cpu.regs.status &= ~(NIOS2_STATUS_PIE | NIOS2_STATUS_U);
+            // cpu.regs.ea = nextpc;
+            // nextpc = cpu.features.exception_addr;
+            cpu.state = sim_stopped;
+            cpu.signal = TARGET_SIGNAL_TRAP;
+            nextpc -= 4;
+            break;
+          /* TODO: wrctl */
+          /* TODO: wrprs */
+          case NIOS2_OP(0x3a)|NIOS2_OPX(0x1e):  /* xor c,a,b */
+            cpu.regs.gpr[NIOS2_GET_C(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] ^ cpu.regs.gpr[NIOS2_GET_B(i)];
+            break;
+          case NIOS2_OP(0x3c):                  /* xorhi b,a,uv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] ^ (NIOS2_GET_IMM16(i) << 16);
+            break;
+          case NIOS2_OP(0x1c):                  /* xori b,a,uv */
+            cpu.regs.gpr[NIOS2_GET_B(i)] =
+              cpu.regs.gpr[NIOS2_GET_A(i)] ^ NIOS2_GET_IMM16(i);
+            break;
+          default:
+            goto unimplemented_instruction;
+        }
+
+      cpu.regs.zero = 0;
+      cpu.regs.pc = nextpc;
+      continue;
+
+unimplemented_instruction:
+      sim_printf("unimplemented_instruction\n");
+      continue;
+misaligned_data_address:
+      sim_printf("misaligned_data_address\n");
+      continue;
+misaligned_destination_address:
+      sim_printf("misaligned_destination_address\n");
+      continue;
+supervisor_only_instruction:
+      sim_printf("supervisor_only_instruction\n");
+      continue;
+;
+    }
+  while(cpu.state == sim_running);
+
 }
 
 /*

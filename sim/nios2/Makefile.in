@@ -15,9 +15,12 @@
 
 ## COMMON_PRE_CONFIG_FRAG
 
-SIM_OBJS = interp.o sim-load.o
+SIM_OBJS = interp.o system.o sim-main.o sim-load.o
 SIM_EXTRA_LIBS = -lm
 
 ## COMMON_POST_CONFIG_FRAG
 
-interp.o: interp.c
+interp.o: interp.c sim-main.h
+sim-main.o: sim-main.c sim-main.h
+system.o: system.c sim-main.h
+

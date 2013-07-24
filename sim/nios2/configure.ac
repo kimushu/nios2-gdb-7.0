@@ -9,4 +9,6 @@ sinclude(../common/aclocal.m4)
 # it by inlining the macro's contents.
 sinclude(../common/common.m4)
 
+AC_CHECK_HEADERS(stdarg.h)
+
 SIM_AC_OUTPUT
