@@ -15,14 +15,18 @@ This GDB is based on Altera's Nios II GDB source (http://www.altera.com/support/
 
 1. Compile program with hook
 
+```
     nios2-elf-gcc -o test test.c _repository\_root_/sim/nios2/hook\_sim\_nios2.c
+```
 
 2. Run simulator
 
+```
     _repository\_root_/gdb/gdb ./test
     (gdb) target sim
     (gdb) load
     (gdb) run
+```
 
 ###Build as FPGA embedded program (by Nios II SBT)
 
