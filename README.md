@@ -1,7 +1,7 @@
 Readme for nios2-gdb-7.0 with simulator
 ---------------
 
-This GDB is based on Altera's Nios II GDB source (http://www.altera.com/support/ip/processors/nios2/ide/ips-nios2-ide-tutorial.html)
+This GDB is based on Altera's Nios II GNU tools source version 13.0 (http://www.altera.com/support/ip/processors/nios2/ide/ips-nios2-ide-tutorial.html)
 
 ##How to build
 
@@ -23,7 +23,7 @@ This GDB is based on Altera's Nios II GDB source (http://www.altera.com/support/
 1. Compile program with hook
   
   ```
-  $ nios2-elf-gcc -o test test.c <repository_root>/sim/nios2/hook\_sim\_nios2.c
+  $ nios2-elf-gcc -o test test.c <repository_root>/sim/nios2/hook_sim_nios2.c
   ```
 2. Run simulator
  
