@@ -11,57 +11,58 @@
 extern "C" { // }
 #endif
 
-enum sim_nios2_regs {
-  SIM_NIOS2_R0_REGNUM,  /* zero */
-  SIM_NIOS2_R1_REGNUM,  /* at */
-  SIM_NIOS2_R2_REGNUM,
-  SIM_NIOS2_R3_REGNUM,
-  SIM_NIOS2_R4_REGNUM,
-  SIM_NIOS2_R5_REGNUM,
-  SIM_NIOS2_R6_REGNUM,
-  SIM_NIOS2_R7_REGNUM,
-  SIM_NIOS2_R8_REGNUM,
-  SIM_NIOS2_R9_REGNUM,
-  SIM_NIOS2_R10_REGNUM,
-  SIM_NIOS2_R11_REGNUM,
-  SIM_NIOS2_R12_REGNUM,
-  SIM_NIOS2_R13_REGNUM,
-  SIM_NIOS2_R14_REGNUM,
-  SIM_NIOS2_R15_REGNUM,
-  SIM_NIOS2_R16_REGNUM,
-  SIM_NIOS2_R17_REGNUM,
-  SIM_NIOS2_R18_REGNUM,
-  SIM_NIOS2_R19_REGNUM,
-  SIM_NIOS2_R20_REGNUM,
-  SIM_NIOS2_R21_REGNUM,
-  SIM_NIOS2_R22_REGNUM,
-  SIM_NIOS2_R23_REGNUM,
-  SIM_NIOS2_R24_REGNUM, /* et */
-  SIM_NIOS2_R25_REGNUM, /* bt */
-  SIM_NIOS2_R26_REGNUM, /* gp */
-  SIM_NIOS2_R27_REGNUM, /* sp */
-  SIM_NIOS2_R28_REGNUM, /* fp */
-  SIM_NIOS2_R29_REGNUM, /* ea */
-  SIM_NIOS2_R30_REGNUM, /* ba */
-  SIM_NIOS2_R31_REGNUM, /* ra */
-  SIM_NIOS2_PC_REGNUM,
-  SIM_NIOS2_STATUS_REGNUM,
-  SIM_NIOS2_ESTATUS_REGNUM,
-  SIM_NIOS2_BSTATUS_REGNUM,
-  SIM_NIOS2_IENABLE_REGNUM,
-  SIM_NIOS2_IPENDING_REGNUM,
-  SIM_NIOS2_CPUID_REGNUM,
-  SIM_NIOS2_CTL6_REGNUM,
-  SIM_NIOS2_EXCEPTION_REGNUM,
-  SIM_NIOS2_PTEADDR_REGNUM,
-  SIM_NIOS2_TLBACC_REGNUM,
-  SIM_NIOS2_TLBMISC_REGNUM,
-  SIM_NIOS2_CTL11_REGNUM,
-  SIM_NIOS2_BADADDR_REGNUM,
-  SIM_NIOS2_CONFIG_REGNUM,
-  SIM_NIOS2_MPUBASE_REGNUM,
-  SIM_NIOS2_MPUACC_REGNUM,
-};
+enum sim_nios2_regs
+  {
+    SIM_NIOS2_R0_REGNUM,  /* zero */
+    SIM_NIOS2_R1_REGNUM,  /* at */
+    SIM_NIOS2_R2_REGNUM,
+    SIM_NIOS2_R3_REGNUM,
+    SIM_NIOS2_R4_REGNUM,
+    SIM_NIOS2_R5_REGNUM,
+    SIM_NIOS2_R6_REGNUM,
+    SIM_NIOS2_R7_REGNUM,
+    SIM_NIOS2_R8_REGNUM,
+    SIM_NIOS2_R9_REGNUM,
+    SIM_NIOS2_R10_REGNUM,
+    SIM_NIOS2_R11_REGNUM,
+    SIM_NIOS2_R12_REGNUM,
+    SIM_NIOS2_R13_REGNUM,
+    SIM_NIOS2_R14_REGNUM,
+    SIM_NIOS2_R15_REGNUM,
+    SIM_NIOS2_R16_REGNUM,
+    SIM_NIOS2_R17_REGNUM,
+    SIM_NIOS2_R18_REGNUM,
+    SIM_NIOS2_R19_REGNUM,
+    SIM_NIOS2_R20_REGNUM,
+    SIM_NIOS2_R21_REGNUM,
+    SIM_NIOS2_R22_REGNUM,
+    SIM_NIOS2_R23_REGNUM,
+    SIM_NIOS2_R24_REGNUM, /* et */
+    SIM_NIOS2_R25_REGNUM, /* bt */
+    SIM_NIOS2_R26_REGNUM, /* gp */
+    SIM_NIOS2_R27_REGNUM, /* sp */
+    SIM_NIOS2_R28_REGNUM, /* fp */
+    SIM_NIOS2_R29_REGNUM, /* ea */
+    SIM_NIOS2_R30_REGNUM, /* ba */
+    SIM_NIOS2_R31_REGNUM, /* ra */
+    SIM_NIOS2_PC_REGNUM,
+    SIM_NIOS2_STATUS_REGNUM,
+    SIM_NIOS2_ESTATUS_REGNUM,
+    SIM_NIOS2_BSTATUS_REGNUM,
+    SIM_NIOS2_IENABLE_REGNUM,
+    SIM_NIOS2_IPENDING_REGNUM,
+    SIM_NIOS2_CPUID_REGNUM,
+    SIM_NIOS2_CTL6_REGNUM,
+    SIM_NIOS2_EXCEPTION_REGNUM,
+    SIM_NIOS2_PTEADDR_REGNUM,
+    SIM_NIOS2_TLBACC_REGNUM,
+    SIM_NIOS2_TLBMISC_REGNUM,
+    SIM_NIOS2_CTL11_REGNUM,
+    SIM_NIOS2_BADADDR_REGNUM,
+    SIM_NIOS2_CONFIG_REGNUM,
+    SIM_NIOS2_MPUBASE_REGNUM,
+    SIM_NIOS2_MPUACC_REGNUM,
+  };
 
 typedef union
   {
@@ -125,15 +126,28 @@ nios2_cpu_t;
 #define AVM_READONLY      (1<<16)
 #define AVM_NOCACHE       (1<<17)
 
+
+enum nios2_sys_magics
+  {
+    NIOS2_SYS_WRITE = 0x0001,
+    NIOS2_SYS__EXIT = 0x0010,
+    NIOS2_SYS_MAGIC = 0xcafe,
+  };
+
 extern int nios2_reset(void);
 extern int nios2_interpret(int step);
 extern nios2_cpu_t cpu;
 
 extern int avm_add_memory(const char *name, SIM_ADDR base, int flags, unsigned char *buf, int length);
+extern int avm_end_address(SIM_ADDR *pend, int flags);
 extern void avm_clear_sections(void);
 extern int avm_read(SIM_ADDR mem, unsigned char *buf, int length, int flags);
 extern int avm_write(SIM_ADDR mem, unsigned char *buf, int length, int flags);
 extern int avm_write_force(SIM_ADDR mem, unsigned char *buf, int length, int flags);
+
+extern int sim_sys_write(int file, SIM_ADDR ptr, int len);
+extern int sim_sys_read(int file, SIM_ADDR ptr, int len);
+extern void sim_sys__exit(int exitcode);
 
 #ifdef __cplusplus
 }

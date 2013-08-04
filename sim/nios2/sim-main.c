@@ -71,12 +71,15 @@ SIM_RC
 sim_load (SIM_DESC sd, char *prog, struct bfd *abfd, int from_tty)
 {
   bfd *prog_bfd;
+  SIM_ADDR end;
 
   sim_loading = 1;
   prog_bfd = sim_load_file (sd, sim_name, sim_callback, prog, abfd,
                             sim_kind == SIM_OPEN_DEBUG,
                             0, sim_write);
 
+  if (avm_end_address(&end, AVM_INSTRUCTION | AVM_DATA) >= 0)
+    avm_add_memory("heap", end, AVM_DATA, NULL, 0x800000);
   avm_add_memory("stack", 0x7800000, AVM_DATA, NULL, 0x800000);
   sim_loading = 0;
 
@@ -205,6 +208,34 @@ sim_trace (SIM_DESC sd)
   /* DEPRECATED */
   sim_printf("sim_trace()\n");
   return 1;
+}
+
+int
+sim_sys_write (int file, SIM_ADDR ptr, int len)
+{
+  int i;
+  char buf;
+
+  if (file != 1 /* stdout */ && file != 2 /* stderr */)
+    return -1;
+
+  for (i = len; i > 0; --i, ++ptr)
+    {
+      if (avm_read(ptr, &buf, 1, AVM_DATA) != 1)
+        buf = 0xff;
+      sim_printf("%c", buf);
+    }
+
+  return len;
+}
+
+int
+sim_sys_read (int file, SIM_ADDR ptr, int len)
+{
+  if (file != 0 /* stdin */)
+    return -1;
+  /* TODO */
+  return -1;
 }
 
 /*

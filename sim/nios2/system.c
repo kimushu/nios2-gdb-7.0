@@ -127,6 +127,9 @@ avm_add_memory(const char *name, SIM_ADDR base, int flags, unsigned char *buf, i
   if (index < mm_sect_count && mm_sects[index]->base < end)
     return 0; /* overlaps into the next section */
 
+  if (*name)
+    sim_printf("Adding memory \"%s\", size 0x%x vma 0x%x\n", name, length, base);
+
   /* add new section pointer */
   ++mm_sect_count;
   mm_sects = (struct mm_section_t **) realloc(mm_sects, sizeof(*mm_sects) * mm_sect_count);
@@ -146,6 +149,21 @@ avm_add_memory(const char *name, SIM_ADDR base, int flags, unsigned char *buf, i
 
   strcpy(s->name, name);
   return length;
+}
+
+int
+avm_end_address(SIM_ADDR *pend, int flags)
+{
+  int i = mm_sect_count - 1;
+
+  while (i >= 0 && (mm_sects[i]->flags & flags) == 0)
+    --i;
+
+  if (i < 0)
+    return -1;
+
+  *pend = mm_sects[i]->end;
+  return i;
 }
 
 int
