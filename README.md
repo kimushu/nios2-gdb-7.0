@@ -5,28 +5,34 @@ This GDB is based on Altera's Nios II GDB source (http://www.altera.com/support/
 
 ##How to build
 
-1. "./configure --target=nios2-elf"
-
-2.  "make"
+1. Execute configure
+  
+  ```
+   ./configure --target=nios2-elf
+  ```
+2. Build gdb
+  
+  ```
+  make
+  ```
 
 ##How to use
 
 ###Build as standalone program (not for FPGA)
 
 1. Compile program with hook
-
-```
-    nios2-elf-gcc -o test test.c _repository\_root_/sim/nios2/hook\_sim\_nios2.c
-```
-
+  
+  ```
+  $ nios2-elf-gcc -o test test.c <repository_root>/sim/nios2/hook\_sim\_nios2.c
+  ```
 2. Run simulator
-
-```
-    _repository\_root_/gdb/gdb ./test
-    (gdb) target sim
-    (gdb) load
-    (gdb) run
-```
+ 
+  ```
+  $ <repository_root>/gdb/gdb ./test
+  (gdb) target sim
+  (gdb) load
+  (gdb) run
+  ```
 
 ###Build as FPGA embedded program (by Nios II SBT)
 
