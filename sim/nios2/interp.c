@@ -224,7 +224,7 @@ branch:
             break;
           case NIOS2_OP(0x20):                  /* cmpeqi b,a,sv */
             if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] ==
-                (signed32) NIOS2_GET_IMM16(i))
+                (signed16) NIOS2_GET_IMM16(i))
               b = 1;
             else
               b = 0;
@@ -242,7 +242,7 @@ branch:
             break;
           case NIOS2_OP(0x08):                  /* cmpgei b,a,sv */
             if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] >=
-                (signed32) NIOS2_GET_IMM16(i))
+                (signed16) NIOS2_GET_IMM16(i))
               b = 1;
             else
               b = 0;
@@ -276,7 +276,7 @@ branch:
             break;
           case NIOS2_OP(0x10):                  /* cmplti b,a,sv */
             if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] <
-                (signed32) NIOS2_GET_IMM16(i))
+                (signed16) NIOS2_GET_IMM16(i))
               b = 1;
             else
               b = 0;
@@ -309,7 +309,7 @@ branch:
             break;
           case NIOS2_OP(0x18):                  /* cmpnei b,a,sv */
             if ((signed32) cpu.regs.gpr[NIOS2_GET_A(i)] !=
-                (signed32) NIOS2_GET_IMM16(i))
+                (signed16) NIOS2_GET_IMM16(i))
               b = 1;
             else
               b = 0;
@@ -400,9 +400,9 @@ branch:
               /* TODO: data access failed */
               b = 0xffffffff;
             else if (c == 1)
-              b = (opcode & NIOS2_OP(0x04)) ? (signed32) buf.b : buf.bu;
+              b = (opcode & NIOS2_OP(0x04)) ? (signed8) buf.b : buf.bu;
             else if (c == 2)
-              b = (opcode & NIOS2_OP(0x04)) ? (signed32) buf.h : buf.hu;
+              b = (opcode & NIOS2_OP(0x04)) ? (signed16) buf.h : buf.hu;
             else
               b = buf.wu;
 
@@ -420,7 +420,7 @@ branch:
             if (!cpu.features.hwmul)
               goto unimplemented_instruction;
             cpu.regs.gpr[NIOS2_GET_B(i)] =
-              cpu.regs.gpr[NIOS2_GET_A(i)] * (signed32) NIOS2_GET_IMM16(i);
+              cpu.regs.gpr[NIOS2_GET_A(i)] * (signed16) NIOS2_GET_IMM16(i);
             break;
           case NIOS2_OP(0x3a)|NIOS2_OPX(0x1f):  /* mulxss c,a,b */
             if (!cpu.features.hwmulx)
