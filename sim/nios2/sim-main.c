@@ -79,8 +79,8 @@ sim_load (SIM_DESC sd, char *prog, struct bfd *abfd, int from_tty)
                             0, sim_write);
 
   if (avm_end_address(&end, AVM_INSTRUCTION | AVM_DATA) >= 0)
-    avm_add_memory("heap", end, AVM_DATA, NULL, 0x800000);
-  avm_add_memory("stack", 0x7800000, AVM_DATA, NULL, 0x800000);
+    avm_add_memory("heap", end, AVM_DATA | AVM_INSTRUCTION, NULL, 0x800000);
+  avm_add_memory("stack", 0x7800000, AVM_DATA | AVM_INSTRUCTION, NULL, 0x800000);
   sim_loading = 0;
 
   if (prog_bfd == NULL)
