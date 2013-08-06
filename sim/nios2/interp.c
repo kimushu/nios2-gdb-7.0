@@ -69,6 +69,8 @@ nios2_reset(void)
   /* jump to reset vector */
   cpu.regs.pc = cpu.features.reset_addr;
 
+  btrace_record(0xffffffff, cpu.regs.pc);
+
   return 1;
 }
 
@@ -177,6 +179,8 @@ branch:
             nextpc += (signed16) NIOS2_GET_IMM16(i);
             if (nextpc & 3)
               goto misaligned_destination_address;
+branch_trace:
+            btrace_record(cpu.regs.pc, nextpc);
             break;
           case NIOS2_OP(0x3a)|NIOS2_OPX(0x34):  /* break imm5 */
             if (NIOS2_GET_A(i) != 0 || NIOS2_GET_B(i) != 0 || NIOS2_GET_C(i) != 0x1e)
@@ -199,11 +203,11 @@ branch:
               goto supervisor_only_instruction;
             cpu.regs.status = cpu.regs.bstatus;
             nextpc = a;
-            break;
+            goto branch_trace;
           case NIOS2_OP(0x00):                  /* call imm26 */
             cpu.regs.ra = nextpc;
             nextpc = NIOS2_GET_IMM26(i) * 4;
-            break;
+            goto branch_trace;
           case NIOS2_OP(0x3a)|NIOS2_OPX(0x1d):  /* callr a */
             if (NIOS2_GET_B(i) != 0 || NIOS2_GET_C(i) != 0x1f || NIOS2_GET_IMM5(i) != 0)
               goto illegal_instruction_format;
@@ -212,7 +216,7 @@ branch:
               goto misaligned_destination_address;
             cpu.regs.ra = nextpc;
             nextpc = a;
-            break;
+            goto branch_trace;
           case NIOS2_OP(0x3a)|NIOS2_OPX(0x20):  /* cmpeq c,a,b */
             if (NIOS2_GET_IMM5(i) != 0)
               goto illegal_instruction_format;
@@ -355,7 +359,7 @@ branch:
               goto supervisor_only_instruction;
             cpu.regs.status = cpu.regs.estatus;
             nextpc = a;
-            break;
+            goto branch_trace;
           /* TODO: flushd */
           /* TODO: flushda */
           /* TODO: flushi */
@@ -370,10 +374,10 @@ branch:
             if (a & 3)
               goto misaligned_destination_address;
             nextpc = a;
-            break;
+            goto branch_trace;
           case NIOS2_OP(0x01):                  /* jmpi imm26 */
             nextpc = NIOS2_GET_IMM26(i) * 4;
-            break;
+            goto branch_trace;
           case NIOS2_OP(0x07):                  /* ldb b,sv(a) */
           case NIOS2_OP(0x27):                  /* ldbio b,sv(a) */
           case NIOS2_OP(0x03):                  /* ldbu b,sv(a) */
@@ -500,7 +504,7 @@ branch:
             nextpc = cpu.regs.ra;
             if (nextpc & 3)
               goto misaligned_destination_address;
-            break;
+            goto branch_trace;
           case NIOS2_OP(0x3a)|NIOS2_OPX(0x03):  /* rol c,a,b */
             if (NIOS2_GET_IMM5(i) != 0)
               goto illegal_instruction_format;
@@ -657,6 +661,10 @@ supervisor_only_instruction:
 illegal_instruction_format:
       sim_printf("illegal_instruction_format\n");
 stop_running:
+      if (NIOS2_GET_OP(i) == 0x3a)
+        sim_printf("last instruction: %08x (OP=%02x,OPX=%02x)\n", i, NIOS2_GET_OP(i), NIOS2_GET_OPX(i));
+      else
+        sim_printf("last instruction: %08x (OP=%02x)\n", i, NIOS2_GET_OP(i));
       cpu.state = sim_stopped;
       cpu.signal = TARGET_SIGNAL_TRAP;
       continue;

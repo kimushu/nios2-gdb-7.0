@@ -99,10 +99,34 @@ typedef struct
   }
 nios2_features_t;
 
+enum nios2_btrace_mode
+  {
+    NIOS2_BTRACE_DISABLED,
+    NIOS2_BTRACE_RING,
+    NIOS2_BTRACE_LINEAR,
+  };
+
+typedef struct
+  {
+    unsigned32 from;
+    unsigned32 to;
+  }
+ nios2_btrace_entry_t;
+
+typedef struct
+  {
+    enum nios2_btrace_mode mode;
+    unsigned32 index;
+    unsigned32 size;
+    nios2_btrace_entry_t *buffer;
+  }
+nios2_btrace_t;
+
 typedef struct
   {
     nios2_regs_t regs;
     nios2_features_t features;
+    nios2_btrace_t btrace;
 
     enum sim_stop state;
     int signal;
@@ -149,8 +173,15 @@ extern int sim_sys_write(int file, SIM_ADDR ptr, int len);
 extern int sim_sys_read(int file, SIM_ADDR ptr, int len);
 extern void sim_sys__exit(int exitcode);
 
+extern void btrace_record(unsigned32 from, unsigned32 to);
+extern int btrace_command(int argc, char *argv[]);
+extern int btrace_free(void);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif
+/*
+ * vim:et sts=2 sw=2:
+ */

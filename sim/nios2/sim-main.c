@@ -65,6 +65,7 @@ void
 sim_close (SIM_DESC sd, int quitting)
 {
   avm_clear_sections();
+  btrace_free();
 }
 
 SIM_RC
@@ -186,6 +187,31 @@ sim_stop_reason (SIM_DESC sd, enum sim_stop *reason, int *sigrc)
 void
 sim_do_command (SIM_DESC sd, char *cmd)
 {
+  int argc = 0;
+  char *argv[16];
+  char *next = cmd;
+  int no_cmd = 0;
+
+  while (next && argc < (sizeof(argv) / sizeof(*argv)))
+    {
+      while (*next == ' ') ++next;
+
+      argv[argc++] = next;
+      next = strchr(next, ' ');
+      if (next)
+        *next++ = 0;
+    }
+
+  if (argc == 0)
+    return;
+
+  if (strcmp(argv[0], "btrace") == 0)
+    no_cmd = btrace_command(argc, argv);
+  else
+    sim_printf("unknown simulator command: %s\n", argv[0]);
+
+  if (no_cmd)
+    sim_printf("unknown simulator command: %s %s\n", argv[0], argv[1]);
 }
 
 void
